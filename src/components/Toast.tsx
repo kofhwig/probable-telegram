@@ -4,6 +4,9 @@ import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/tokens';
 
+/** Height of the tab bar the toast has to clear. */
+const TAB_BAR = 86;
+
 interface ToastItem {
   id: number;
   msg: string;
@@ -35,7 +38,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <View pointerEvents="none" style={[styles.wrap, { bottom: 104 + insets.bottom }]}>
+      <View pointerEvents="none" style={[styles.wrap, { bottom: TAB_BAR + 16 + insets.bottom }]}>
         {items.map((t) => (
           <Animated.View key={t.id} entering={FadeInDown.duration(260)} exiting={FadeOut.duration(300)} style={styles.toast}>
             <Text style={styles.text} numberOfLines={2}>

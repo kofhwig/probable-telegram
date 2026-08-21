@@ -13,16 +13,19 @@ export function Page({
   children,
   onRefresh,
   refreshing,
+  testID,
 }: {
   children: React.ReactNode;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** Screen roots are tagged so the walkthrough can tell the mounted scenes apart. */
+  testID?: string;
 }) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} testID={testID}>
       <ScreenBackground />
       <ScrollView
         style={styles.scroll}
@@ -50,5 +53,6 @@ export function Page({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bgMid },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 22, paddingBottom: 40 },
+  // the tab bar floats over the scroll area; the prototype reserved the same room
+  content: { paddingHorizontal: 22, paddingBottom: 124 },
 });

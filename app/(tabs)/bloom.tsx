@@ -61,7 +61,7 @@ export default function Bloom() {
   const reachedIdx = marks.reduce((acc, m, i) => (p >= m[0] ? i : acc), -1);
 
   return (
-    <Page>
+    <Page testID="screen-bloom">
       <View style={{ alignItems: 'center', marginTop: 6, marginBottom: 4 }}>
         <Text style={styles.stage}>{STAGES[stage]}</Text>
         <SerifNum style={styles.headline}>
@@ -91,6 +91,8 @@ export default function Bloom() {
         <View style={styles.progressHead}>
           <Text style={styles.bloomed}>{Math.round(p * 100)}% bloomed</Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit goal"
             onPress={() => {
               tap();
               open({ name: 'goal' });

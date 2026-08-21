@@ -23,7 +23,7 @@ export default function Insights() {
 
   if (!c.hs.length) {
     return (
-      <Page>
+      <Page testID="screen-insights">
         <View style={{ marginTop: 6, marginBottom: 18, marginHorizontal: 2 }}>
           <PageKick>For you</PageKick>
           <PageTitle>Insights</PageTitle>
@@ -88,7 +88,7 @@ export default function Insights() {
   const divColor = div.score >= 80 ? C.mint : div.score >= 55 ? C.gold : C.coral;
 
   return (
-    <Page>
+    <Page testID="screen-insights">
       <View style={{ marginTop: 6, marginBottom: 18, marginHorizontal: 2 }}>
         <PageKick>For you</PageKick>
         <PageTitle>Insights</PageTitle>

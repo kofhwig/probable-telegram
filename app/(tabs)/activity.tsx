@@ -40,7 +40,7 @@ export default function Activity() {
   }, [S.tx]);
 
   return (
-    <Page>
+    <Page testID="screen-activity">
       <View style={styles.head}>
         <View>
           <PageKick>Recent</PageKick>

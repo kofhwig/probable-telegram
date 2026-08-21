@@ -132,7 +132,7 @@ export default function Home() {
 
   if (!S.holdings.length && S.cash === 0) {
     return (
-      <Page>
+      <Page testID="screen-home">
         {header}
         {hero}
         <Empty>
@@ -148,7 +148,7 @@ export default function Home() {
   }
 
   return (
-    <Page onRefresh={S.settings.liveQuotes ? () => refresh() : undefined} refreshing={refreshing}>
+    <Page testID="screen-home" onRefresh={S.settings.liveQuotes ? () => refresh() : undefined} refreshing={refreshing}>
       {header}
       {hero}
 

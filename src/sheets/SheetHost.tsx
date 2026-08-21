@@ -10,11 +10,23 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { Icon } from '../components/Icon';
 import { ErrText, tap } from '../components/ui';
 import { C, F, R } from '../theme/tokens';
@@ -53,12 +65,16 @@ function Backdrop(props: BottomSheetBackdropProps) {
   return <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.62} pressBehavior="close" />;
 }
 
-function Background({ style }: BottomSheetBackgroundProps) {
+function SheetGround({ style }: { style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[style, styles.bg]}>
       <LinearGradient colors={[C.sheetTop, C.sheetBottom]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
     </View>
   );
+}
+
+function Background({ style }: BottomSheetBackgroundProps) {
+  return <SheetGround style={style} />;
 }
 
 function Handle() {
@@ -73,6 +89,9 @@ function Handle() {
  * Every sheet shares this frame: title, optional subtitle, close button, and an
  * error line above the body — the prototype's `sheetShell`.
  */
+/** The sheet's scroller belongs to the sheet on native; on web it is a plain one. */
+const Scroll = Platform.OS === 'web' ? ScrollView : BottomSheetScrollView;
+
 export function SheetShell({
   title,
   sub,
@@ -106,49 +125,114 @@ export function SheetShell({
           <Icon name="x" size={15} color={C.dim} />
         </Pressable>
       </View>
-      <BottomSheetScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <Scroll contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <ErrText>{error}</ErrText>
         {children}
-      </BottomSheetScrollView>
+      </Scroll>
     </>
   );
 }
 
 export function SheetProvider({ children }: { children: React.ReactNode }) {
   const ref = useRef<BottomSheetModal>(null);
+  /**
+   * `spec` is what to render, `showing` is whether the sheet is up. They are
+   * separate so the content survives the closing animation — and so present and
+   * dismiss are driven by state rather than by an imperative call racing the
+   * state update that a sheet's own submit button just made.
+   */
   const [spec, setSpec] = useState<SheetSpec | null>(null);
+  const [showing, setShowing] = useState(false);
   const { height } = useWindowDimensions();
+
+  // dismissing a modal that was never presented leaves it unable to present
+  const presented = useRef(false);
+  useEffect(() => {
+    if (showing) {
+      presented.current = true;
+      ref.current?.present();
+    } else if (presented.current) {
+      presented.current = false;
+      ref.current?.close();
+      ref.current?.dismiss();
+    }
+  }, [showing, spec]);
 
   const open = useCallback((next: SheetSpec) => {
     setSpec(next);
-    ref.current?.present();
+    setShowing(true);
   }, []);
 
-  const close = useCallback(() => {
-    ref.current?.dismiss();
-  }, []);
+  const close = useCallback(() => setShowing(false), []);
 
   const api = useMemo(() => ({ open, close }), [open, close]);
+
+  const body = spec ? <SheetBody spec={spec} /> : null;
 
   return (
     <Ctx.Provider value={api}>
       {children}
-      <BottomSheetModal
-        ref={ref}
-        onDismiss={() => setSpec(null)}
-        enableDynamicSizing
-        maxDynamicContentSize={height * 0.88}
-        enablePanDownToClose
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
-        backdropComponent={Backdrop}
-        backgroundComponent={Background}
-        handleComponent={Handle}
-      >
-        {spec ? <SheetBody spec={spec} /> : null}
-      </BottomSheetModal>
+      {Platform.OS === 'web' ? (
+        <WebSheet showing={showing} maxHeight={height * 0.88} onClose={close}>
+          {body}
+        </WebSheet>
+      ) : (
+        <BottomSheetModal
+          ref={ref}
+          onDismiss={() => {
+            setShowing(false);
+            setSpec(null);
+          }}
+          enableDynamicSizing
+          maxDynamicContentSize={height * 0.88}
+          enablePanDownToClose
+          keyboardBehavior="interactive"
+          keyboardBlurBehavior="restore"
+          android_keyboardInputMode="adjustResize"
+          backdropComponent={Backdrop}
+          backgroundComponent={Background}
+          handleComponent={Handle}
+        >
+          {body}
+        </BottomSheetModal>
+      )}
     </Ctx.Provider>
+  );
+}
+
+/**
+ * The web preview's stand-in for the native sheet. `@gorhom/bottom-sheet`
+ * presents fine under react-native-web but will not dismiss there, which would
+ * strand anyone running `expo start --web` (and the walkthrough script) behind
+ * an unclosable panel. The sheet bodies and the shell are the same either way —
+ * only the container differs, and only off-device.
+ */
+function WebSheet({
+  showing,
+  maxHeight,
+  onClose,
+  children,
+}: {
+  showing: boolean;
+  maxHeight: number;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (!showing) return null;
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable accessibilityLabel="Dismiss" style={[StyleSheet.absoluteFill, styles.webScrim]} onPress={onClose} />
+      <Animated.View
+        entering={SlideInDown.duration(280)}
+        exiting={SlideOutDown.duration(220)}
+        style={[styles.webSheet, { maxHeight }]}
+        testID="sheet"
+      >
+        <SheetGround style={StyleSheet.absoluteFill} />
+        <Handle />
+        {children}
+      </Animated.View>
+    </View>
   );
 }
 
@@ -216,4 +300,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   body: { paddingHorizontal: 22, paddingTop: 4, paddingBottom: 34 },
+  webScrim: { backgroundColor: C.scrim },
+  webSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: R.sheet,
+    borderTopRightRadius: R.sheet,
+    overflow: 'hidden',
+  },
 });

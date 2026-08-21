@@ -22,7 +22,7 @@ export default function Welcome() {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} testID="screen-welcome">
       <ScreenBackground />
       <ScrollView
         contentContainerStyle={[styles.page, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 40 }]}

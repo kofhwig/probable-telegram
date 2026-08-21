@@ -56,7 +56,7 @@ export default function HoldingDetail() {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} testID="screen-holding">
       <LinearGradient colors={[C.overlayTop, C.overlayBottom]} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={StyleSheet.absoluteFill} />
 
       <ScrollView
@@ -150,8 +150,8 @@ function StatBox({ label, value, sub, tone }: { label: string; value: string; su
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.overlayBottom },
-  // clears the pinned Buy/Sell footer
-  body: { paddingHorizontal: 22, paddingBottom: 32 },
+  // clears the pinned Buy/Sell footer, which floats over the scroll area
+  body: { paddingHorizontal: 22, paddingBottom: 110 },
   topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
   sym: { color: C.text, fontFamily: F.sansBold, fontSize: 15 },
   name: { color: C.dim, fontSize: 11.5, fontFamily: F.sansMed },

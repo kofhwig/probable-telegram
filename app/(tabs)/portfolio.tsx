@@ -29,7 +29,7 @@ export default function PortfolioScreen() {
   const totalTone = toneOf(c.total);
 
   return (
-    <Page onRefresh={S.settings.liveQuotes ? () => refresh() : undefined} refreshing={refreshing}>
+    <Page testID="screen-portfolio" onRefresh={S.settings.liveQuotes ? () => refresh() : undefined} refreshing={refreshing}>
       <View style={styles.head}>
         <View>
           <PageKick>Holdings</PageKick>

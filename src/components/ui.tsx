@@ -255,7 +255,10 @@ export function Field({
   /** Inside a bottom sheet the input must be the sheet's own, or the keyboard fights the pan gesture. */
   sheet?: boolean;
 }) {
-  const Input = sheet ? BottomSheetTextInput : TextInput;
+  // BottomSheetTextInput exists to keep the native keyboard from fighting the
+  // sheet's pan gesture; on web there is no keyboard to avoid, and it reaches
+  // for a TextInputState method react-native-web does not implement.
+  const Input = sheet && Platform.OS !== 'web' ? BottomSheetTextInput : TextInput;
   return (
     <View style={[styles.field, style]}>
       <Text style={styles.fieldLabel}>{label}</Text>

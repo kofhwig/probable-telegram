@@ -56,7 +56,7 @@ export function Chart({ vals, height, color, strokeWidth = 2.4, gradientId, date
   const body = (
     <View style={{ height }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       {path ? (
-        <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           <Defs>
             <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor={color} stopOpacity={0.32} />

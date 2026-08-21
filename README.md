@@ -25,14 +25,24 @@ npx eas build --profile production --platform ios
 
 ```bash
 npm run typecheck     # tsc --noEmit
-npm test              # jest — domain logic and quote parsing
+npm test              # jest — domain logic, the store's actions, quote parsing
 npm run doctor        # expo-doctor
 npx expo export --platform ios --platform android
+
+npx expo export --platform web
+node scripts/walkthrough.mjs   # drives every sheet and every write path
+node scripts/screenshot.mjs    # captures each screen
 ```
 
-`scripts/screenshot.mjs` exports the app for web, walks it at phone size and writes
-`screenshots/*.png`. React Native Web only approximates the native result, so treat it as a smoke
-test for blank screens and layout breakage, not for pixel fidelity.
+`scripts/walkthrough.mjs` starts from an empty portfolio and works through the app the way a person
+would: add a holding, buy, sell, deposit, withdraw, log a dividend, update prices, move the goal,
+switch currency, export, import, reload, delete, start over — checking what lands on screen at each
+step and failing on any runtime error. It found the bug where *Start over* cleared your data but
+left you on Home.
+
+`scripts/screenshot.mjs` writes `screenshots/*.png` for a quick look. Both run against React Native
+Web, which only approximates the native runtime — they catch broken behaviour and blank screens,
+not pixel fidelity, and they are no substitute for running it on a phone.
 
 `scripts/make-icons.mjs` regenerates the launcher icons and splash mark from SVG, so the artwork
 stays in source rather than as opaque binaries.
@@ -56,7 +66,12 @@ src/
 
 Everything numeric lives in `src/domain` and is ported unchanged from the prototype — the
 diversification score, the alert thresholds, the average-cost and realised-P/L maths, even
-`parseNum`'s handling of `1.234,56`. That layer is plain TypeScript and is where the tests point.
+`parseNum`'s handling of `1.234,56`. That layer is plain TypeScript, and it plus `src/store` is
+where the tests point.
+
+One deliberate fork: on web the sheets render in a plain panel rather than
+`@gorhom/bottom-sheet`, which presents fine under React Native Web but will not dismiss there. The
+sheet contents and the shell are identical; only the container differs, and only off-device.
 
 ### Your data
 

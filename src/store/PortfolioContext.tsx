@@ -338,6 +338,10 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     clearPortfolio();
     commit((draft) => {
       Object.assign(draft, blank());
+      // `blank()` has no `onboarded` key, so assigning it cannot clear one that
+      // is already true — without this, starting over wipes the data but leaves
+      // you sitting on Home instead of back at the welcome screen.
+      draft.onboarded = false;
       return 'Cleared. Starting fresh.';
     });
   }, [commit]);
