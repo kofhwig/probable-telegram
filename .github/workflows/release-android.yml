@@ -1,0 +1,109 @@
+# Builds an installable Android APK and attaches it to a GitHub Release.
+#
+# The app is a managed Expo project — there is no android/ directory in the
+# repository — so the native project is generated here by `expo prebuild` and
+# thrown away with the runner. GitHub's runners carry the Android SDK, which is
+# what makes this possible without anyone installing a toolchain.
+#
+# iOS is deliberately absent: an installable .ipa must be signed with an Apple
+# Developer account, which CI cannot conjure.
+
+name: Release (Android)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the code still builds
+        run: |
+          npx tsc --noEmit
+          npm test -- --ci
+
+      - name: Generate the native project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Assemble the APK
+        working-directory: android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+        run: |
+          set -o pipefail
+          # Expo's template points the release build type at the bundled debug
+          # keystore when no release keystore is configured, so this produces an
+          # optimised APK that installs. If it does not, fall back to a debug
+          # build rather than shipping nothing.
+          ./gradlew assembleRelease --no-daemon --stacktrace || true
+          if [ ! -f app/build/outputs/apk/release/app-release.apk ]; then
+            echo "::warning::release assembly produced no APK — falling back to a debug build"
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Name it
+        id: apk
+        run: |
+          # prefer the release APK; the debug one is only ever a fallback
+          FILE=$(find android/app/build/outputs/apk/release -name '*.apk' 2>/dev/null | head -1)
+          if [ -z "$FILE" ]; then
+            FILE=$(find android/app/build/outputs/apk -name '*.apk' | head -1)
+          fi
+          if [ -z "$FILE" ]; then
+            echo "no APK was produced" >&2
+            exit 1
+          fi
+          # a tag gives the version; a manual run falls back to app.json
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
+            VERSION=$(node -p "require('./app.json').expo.version")
+          fi
+          OUT="bloom-${VERSION}.apk"
+          cp "$FILE" "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          echo "size=$(du -h "$OUT" | cut -f1)" >> "$GITHUB_OUTPUT"
+          echo "built $OUT ($(du -h "$OUT" | cut -f1)) from $FILE"
+
+      # Uploaded separately so a failed release step still leaves something to download
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bloom-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach it to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --title "Bloom $TAG" \
+              --notes "Android APK built from \`$GITHUB_SHA\`. Release notes to follow."
+          fi
