@@ -1,4 +1,4 @@
-import { asFinite, QuoteError, type Quote, type QuoteProvider } from './provider';
+import { asFinite, getQuoteJson, QuoteError, type Quote, type QuoteProvider } from './provider';
 
 const BASE = 'https://finnhub.io/api/v1/quote';
 
@@ -31,15 +31,10 @@ export const finnhubProvider: QuoteProvider = {
   async getQuote(symbol: string, apiKey?: string): Promise<Quote> {
     if (!apiKey) throw new QuoteError(symbol, 'Add a Finnhub API key in Settings');
     const url = `${BASE}?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`;
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: { Accept: 'application/json' } });
-    } catch {
-      throw new QuoteError(symbol, 'No connection');
-    }
+    const res = await getQuoteJson<FinnhubQuoteResponse>(url, symbol);
     if (res.status === 401 || res.status === 403) throw new QuoteError(symbol, 'API key rejected');
     if (res.status === 429) throw new QuoteError(symbol, 'Rate limited — try again shortly');
     if (!res.ok) throw new QuoteError(symbol, `Provider said ${res.status}`);
-    return parseFinnhub(symbol, (await res.json()) as FinnhubQuoteResponse);
+    return parseFinnhub(symbol, res.json as FinnhubQuoteResponse);
   },
 };

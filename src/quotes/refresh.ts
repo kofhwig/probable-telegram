@@ -49,14 +49,29 @@ export function applyQuote(h: Holding, q: Quote): void {
   else pushPrice(h, q.price);
 }
 
+/** A quote that came back, tied to the holding it was asked for. */
+export interface FetchedQuote {
+  id: string;
+  quote: Quote;
+}
+
+export interface FetchResult {
+  quotes: FetchedQuote[];
+  failures: RefreshFailure[];
+}
+
 /**
- * Refreshes every holding against the chosen provider. Failures are collected
- * rather than thrown: one dead ticker must not stop the other six, and a
- * holding that cannot be quoted keeps whatever price was typed in by hand.
+ * Asks the chosen provider for every holding and hands the quotes back without
+ * touching the portfolio. Nothing is written here on purpose: the fetch takes
+ * seconds, and by the time it lands the portfolio may have been edited, so the
+ * caller applies these onto whatever is current instead of onto a stale copy.
+ *
+ * Failures are collected rather than thrown: one dead ticker must not stop the
+ * other six, and a holding that cannot be quoted keeps its hand-entered price.
  */
-export async function refreshQuotes(S: Portfolio, apiKey?: string): Promise<RefreshResult> {
+export async function fetchQuotes(S: Portfolio, apiKey?: string): Promise<FetchResult> {
   const provider = PROVIDERS[S.settings.provider] || yahooProvider;
-  if (!S.holdings.length) return { updated: 0, failures: [] };
+  if (!S.holdings.length) return { quotes: [], failures: [] };
 
   const results = await Promise.all(
     S.holdings.map(async (h) => {
@@ -69,16 +84,11 @@ export async function refreshQuotes(S: Portfolio, apiKey?: string): Promise<Refr
     })
   );
 
-  let updated = 0;
+  const quotes: FetchedQuote[] = [];
   const failures: RefreshFailure[] = [];
   results.forEach(({ h, q, error }) => {
-    if (q) {
-      applyQuote(h, q);
-      updated++;
-    } else {
-      failures.push({ sym: h.sym, message: error || 'Quote failed' });
-    }
+    if (q) quotes.push({ id: h.id, quote: q });
+    else failures.push({ sym: h.sym, message: error || 'Quote failed' });
   });
-  if (updated) S.settings.lastQuoteSync = new Date().toISOString();
-  return { updated, failures };
+  return { quotes, failures };
 }

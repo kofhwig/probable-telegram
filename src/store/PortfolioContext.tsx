@@ -10,7 +10,7 @@ import React, {
 import { AppState, type AppStateStatus } from 'react-native';
 import { useToast } from '../components/Toast';
 import { comp } from '../domain/compute';
-import { money, money2, price as fmtPrice, qty, today, uid } from '../domain/format';
+import { money, money2, parseNum, price as fmtPrice, qty, today, uid } from '../domain/format';
 import {
   applyBuy,
   applySell,
@@ -24,7 +24,7 @@ import {
 import { sampleData } from '../domain/sample';
 import type { Computed, Holding, Portfolio, QuoteProviderId, TxType } from '../domain/types';
 import { getApiKey } from '../quotes/apiKey';
-import { refreshQuotes, type RefreshResult } from '../quotes/refresh';
+import { applyQuote, fetchQuotes, type RefreshResult } from '../quotes/refresh';
 import { clearPortfolio, flushSave, loadPortfolio, savePortfolio } from './storage';
 
 export interface HoldingInput {
@@ -51,8 +51,15 @@ interface PortfolioValue {
   cash(mode: 'deposit' | 'withdraw' | 'set', amount: number, note: string): void;
   logActivity(kind: TxType, amount: number, date: string, note: string, sym: string): void;
   savePrices(next: Record<string, number>): void;
-  setGoal(goal: number): void;
-  saveSettings(next: { name?: string; currency?: string; goal?: number; liveQuotes?: boolean; provider?: QuoteProviderId }): void;
+  /** Accepts what the user typed; parsed with `parseNum` like every other amount. */
+  setGoal(goal: number | string): void;
+  saveSettings(next: {
+    name?: string;
+    currency?: string;
+    goal?: number | string;
+    liveQuotes?: boolean;
+    provider?: QuoteProviderId;
+  }): void;
   deleteHolding(id: string): void;
   deleteTx(id: string): void;
   importJSON(text: string): boolean;
@@ -79,8 +86,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const toast = useToast();
+  /**
+   * The live portfolio, readable synchronously. Every writer updates it in the
+   * same tick it calls `setS`, so an action and a refresh fired from the same
+   * handler cannot read each other's stale copy.
+   */
   const latest = useRef(S);
-  latest.current = S;
 
   useEffect(() => {
     let alive = true;
@@ -88,6 +99,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       if (!alive) return;
       if (loaded) {
         snapshot(loaded);
+        latest.current = loaded;
         setS(loaded);
         savePortfolio(loaded);
       }
@@ -109,18 +121,21 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   /**
    * Every mutation goes through here: mutate a clone, re-snapshot today's value,
    * persist, and optionally toast — the prototype's `commit()`.
+   *
+   * The draft is built here rather than inside the `setS` updater. React may run
+   * an updater during a later render, which made the saving, the toast and the
+   * `latest` write happen after the handler had moved on: a refresh started in
+   * the same handler read the pre-edit portfolio and wrote it back over the edit.
    */
   const commit = useCallback(
     (fn: (draft: Portfolio) => string | void, opts?: { snapshot?: boolean }) => {
-      setS((prev) => {
-        const draft = clone(prev);
-        const msg = fn(draft);
-        if (opts?.snapshot !== false) snapshot(draft);
-        savePortfolio(draft, () => toast('Changes are not being saved on this device'));
-        if (msg) toast(msg);
-        latest.current = draft;
-        return draft;
-      });
+      const draft = clone(latest.current);
+      const msg = fn(draft);
+      if (opts?.snapshot !== false) snapshot(draft);
+      latest.current = draft;
+      setS(draft);
+      savePortfolio(draft, () => toast('Changes are not being saved on this device'));
+      if (msg) toast(msg);
     },
     [toast]
   );
@@ -265,11 +280,13 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     [commit]
   );
 
-  const setGoal = useCallback(
-    (goal: number) => {
+  const setGoal = useCallback<PortfolioValue['setGoal']>(
+    (goal) => {
+      const g = parseNum(goal);
+      if (isNaN(g) || g <= 0) return;
       commit((draft) => {
-        draft.goal = goal;
-        return 'Goal set to ' + money(draft.currency, goal);
+        draft.goal = g;
+        return 'Goal set to ' + money(draft.currency, g);
       });
     },
     [commit]
@@ -280,7 +297,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       commit((draft) => {
         if (next.name !== undefined) draft.name = next.name;
         if (next.currency) draft.currency = next.currency;
-        if (next.goal !== undefined && !isNaN(next.goal) && next.goal > 0) draft.goal = next.goal;
+        // One parser for every amount the user can type, so "1.000,50" means the
+        // same in Settings as it does in the goal sheet.
+        if (next.goal !== undefined) {
+          const g = parseNum(next.goal);
+          if (!isNaN(g) && g > 0) draft.goal = g;
+        }
         if (next.liveQuotes !== undefined) draft.settings.liveQuotes = next.liveQuotes;
         if (next.provider) draft.settings.provider = next.provider;
         return 'Saved';
@@ -317,10 +339,15 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     (text: string) => {
       try {
         const parsed = JSON.parse(text);
-        if (!parsed || !Array.isArray(parsed.holdings)) throw new Error('shape');
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          throw new Error('shape');
+        }
+        if (!Array.isArray(parsed.holdings)) throw new Error('shape');
+        // `hydrate` keeps only the fields below and coerces each one, so a file
+        // that is JSON but not a portfolio cannot reach the screens or the disk.
+        const next = hydrate(parsed);
+        next.onboarded = true;
         commit((draft) => {
-          const next = hydrate(parsed);
-          next.onboarded = true;
           Object.assign(draft, next);
           return 'Portfolio loaded';
         });
@@ -352,24 +379,33 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       if (!current.settings.liveQuotes || !current.holdings.length) return null;
       setRefreshing(true);
       try {
-        const draft = clone(current);
         const key = await getApiKey();
-        const result = await refreshQuotes(draft, key);
-        if (result.updated) {
-          snapshot(draft);
-          savePortfolio(draft);
-          latest.current = draft;
-          setS(draft);
+        const { quotes, failures } = await fetchQuotes(current, key);
+
+        // Quotes land on the portfolio as it is now, not as it was when the
+        // request went out — a holding added or edited meanwhile survives, and
+        // one deleted meanwhile stays deleted.
+        let updated = 0;
+        if (quotes.length) {
+          commit((draft) => {
+            quotes.forEach(({ id, quote }) => {
+              const h = draft.holdings.find((x) => x.id === id);
+              if (!h) return;
+              applyQuote(h, quote);
+              updated++;
+            });
+            if (updated) draft.settings.lastQuoteSync = new Date().toISOString();
+          });
         }
+
+        const result: RefreshResult = { updated, failures };
         if (!opts?.silent) {
-          if (result.failures.length && !result.updated) {
+          if (failures.length && !updated) {
             toast('Could not reach quotes — prices unchanged');
-          } else if (result.failures.length) {
-            toast(
-              `${result.updated} updated · ${result.failures.map((f) => f.sym).join(', ')} failed`
-            );
-          } else if (result.updated) {
-            toast(result.updated + ' price' + (result.updated > 1 ? 's' : '') + ' refreshed');
+          } else if (failures.length) {
+            toast(`${updated} updated · ${failures.map((f) => f.sym).join(', ')} failed`);
+          } else if (updated) {
+            toast(updated + ' price' + (updated > 1 ? 's' : '') + ' refreshed');
           }
         }
         return result;
@@ -377,7 +413,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         setRefreshing(false);
       }
     },
-    [toast]
+    [commit, toast]
   );
 
   /** One quiet refresh when the app is opened, if live quotes are on. */

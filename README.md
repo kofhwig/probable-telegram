@@ -90,6 +90,12 @@ Stays on the device, under the same `bloom:portfolio:v1` key and the same JSON s
 used, so **a portfolio exported from the HTML version imports straight into the app**. Settings →
 Export or import gives you the JSON, a share sheet, and a file picker to load one back.
 
+A file loaded from anywhere is data nobody here wrote, so `hydrate` is the only door in: it keeps the
+fields it knows, coerces each one to the type the screens assume, and drops the rest. Anything that
+still manages to throw hits an error boundary that offers a way back rather than a black screen —
+the import is written to disk before it is drawn, so an unopenable file would otherwise be
+unopenable on every launch after it.
+
 ### Live prices
 
 Off by default for nothing — it ships on, and you can turn it off in Settings.

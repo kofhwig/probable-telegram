@@ -1,5 +1,5 @@
 import type { PricePoint } from '../domain/types';
-import { asFinite, QuoteError, type Quote, type QuoteProvider } from './provider';
+import { asFinite, getQuoteJson, QuoteError, type Quote, type QuoteProvider } from './provider';
 
 const BASE = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
@@ -58,14 +58,8 @@ export const yahooProvider: QuoteProvider = {
   needsKey: false,
   async getQuote(symbol: string): Promise<Quote> {
     const url = `${BASE}${encodeURIComponent(symbol)}?range=6mo&interval=1d`;
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: { Accept: 'application/json' } });
-    } catch {
-      throw new QuoteError(symbol, 'No connection');
-    }
+    const res = await getQuoteJson<YahooChartResponse>(url, symbol);
     if (!res.ok) throw new QuoteError(symbol, `Provider said ${res.status}`);
-    const json = (await res.json()) as YahooChartResponse;
-    return parseYahoo(symbol, json);
+    return parseYahoo(symbol, res.json as YahooChartResponse);
   },
 };

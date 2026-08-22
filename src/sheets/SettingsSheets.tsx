@@ -29,7 +29,10 @@ export function SettingsSheet() {
   }, []);
 
   const submit = async () => {
-    saveSettings({ name: name.trim(), currency, goal: parseFloat(goal.replace(/[^\d.]/g, '')), liveQuotes, provider });
+    // The raw text goes to the store, which parses it with `parseNum` like every
+    // other amount — the strip-everything-but-digits it used to do here read
+    // "1.000,50" as 1.
+    saveSettings({ name: name.trim(), currency, goal, liveQuotes, provider });
     if (provider === 'finnhub') await setApiKey(key.trim());
     close();
   };

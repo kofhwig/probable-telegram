@@ -22,6 +22,7 @@ import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { ToastProvider } from '../src/components/Toast';
 import { SheetProvider } from '../src/sheets/SheetHost';
 import { PortfolioProvider, usePortfolio } from '../src/store/PortfolioContext';
@@ -61,18 +62,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <ThemeProvider value={BLOOM_THEME}>
-          {/* Toast sits outside the store because the store's actions announce through it,
-              and the sheet portal sits inside it so sheet content keeps the store. */}
-          <ToastProvider>
-            <PortfolioProvider>
-              <BottomSheetModalProvider>
-                <SheetProvider>
-                  <Gate />
-                  <StatusBar style="light" />
-                </SheetProvider>
-              </BottomSheetModalProvider>
-            </PortfolioProvider>
-          </ToastProvider>
+          {/* Outside the store on purpose: recovering remounts everything below it,
+              which is what makes "start over" able to rescue an unopenable file. */}
+          <ErrorBoundary>
+            {/* Toast sits outside the store because the store's actions announce through it,
+                and the sheet portal sits inside it so sheet content keeps the store. */}
+            <ToastProvider>
+              <PortfolioProvider>
+                <BottomSheetModalProvider>
+                  <SheetProvider>
+                    <Gate />
+                    <StatusBar style="light" />
+                  </SheetProvider>
+                </BottomSheetModalProvider>
+              </PortfolioProvider>
+            </ToastProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
