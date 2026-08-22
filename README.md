@@ -7,19 +7,30 @@ Bloom started as a single-file HTML prototype (kept at [`reference/bloom.html`](
 for comparison). This repository is that prototype rebuilt as a real iOS and Android app with Expo
 and React Native — same numbers, same screens, native chrome.
 
-## Running it
+## Getting it on a phone
+
+**Android** — download the APK from [Releases](../../releases) and open it on the device. Android
+will ask you to allow installs from that source the first time. The APK is signed with the standard
+Expo debug key, which is what makes it installable with no signing setup; builds from the same
+workflow install over each other.
+
+**iOS** — there is no downloadable build, and there cannot be one from CI: an installable `.ipa`
+must be signed with a paid Apple Developer account. Run it through Expo Go instead (below), or
+`npx eas build --profile production --platform ios` once you have that account.
+
+**Either, from source:**
 
 ```bash
 npm install
 npx expo start        # then open in Expo Go, or press i / a for a simulator
 ```
 
-Building installable binaries needs EAS (no Android SDK or Xcode is required locally):
+## Cutting a release
 
-```bash
-npx eas build --profile preview --platform android   # APK you can sideload
-npx eas build --profile production --platform ios
-```
+`.github/workflows/release-android.yml` builds the APK on GitHub's runners — they carry the Android
+SDK, so nobody needs a local toolchain. Push a `v*` tag, or run the workflow by hand and give it a
+version; it typechecks, runs the tests, prebuilds the native project, assembles the APK, and
+attaches it to the release for that tag.
 
 ## Checks
 
